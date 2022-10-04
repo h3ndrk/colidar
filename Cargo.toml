@@ -1,0 +1,10 @@
+[package]
+name = "airhockey"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bevy = { version = "0.8.1", features = ["wayland"] }
+bevy_rapier2d = "0.17.0"
