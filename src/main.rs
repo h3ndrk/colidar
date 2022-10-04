@@ -3,12 +3,20 @@ use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
 use bevy_rapier2d::prelude::*;
 use cursor::{update_cursor, Cursor};
+use goal::detect_goal;
+use input::detect_key_input;
 use iyes_loopless::prelude::*;
 
 mod assets;
 mod cursor;
+mod goal;
+mod input;
 
 const BACKGROUND_COLOR: Color = Color::rgb(0.5, 0.5, 0.5);
+
+const TABLE_WIDTH: f32 = 400.0;
+const TABLE_LENGTH: f32 = 800.0;
+const GOAL_WIDTH: f32 = 100.0;
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]
 enum AppState {
@@ -28,7 +36,7 @@ fn main() {
                 .continue_to_state(AppState::SetupWorld)
                 .with_collection::<Textures>(),
         )
-        //.add_plugin(RapierDebugRenderPlugin::default())
+        .add_plugin(RapierDebugRenderPlugin::default())
         .insert_resource(WindowDescriptor {
             title: "CoLiDAR".to_string(),
             ..default()
@@ -45,6 +53,8 @@ fn main() {
                 .run_in_state(AppState::Game)
                 .with_system(update_cursor)
                 .with_system(update_stick)
+                .with_system(detect_key_input)
+                .with_system(detect_goal)
                 .into(),
         )
         .run();
@@ -52,6 +62,9 @@ fn main() {
 
 #[derive(Component)]
 struct Stick;
+
+#[derive(Component)]
+pub struct Puck;
 
 fn update_stick(cursor: Res<Cursor>, mut sticks: Query<&mut Transform, With<Stick>>) {
     for mut stick in &mut sticks {
@@ -65,30 +78,44 @@ fn setup_camera(mut commands: Commands) {
 
 fn setup_table(mut commands: Commands, textures: Res<Textures>) {
     info!("Setting up table...");
-    let width = 400.0;
-    let length = 800.0;
     commands
         .spawn()
-        .insert(RigidBody::Fixed)
-        .insert(Collider::polyline(
-            vec![
-                Vec2::new(-length / 2.0, -width / 2.0),
-                Vec2::new(-length / 2.0, width / 2.0),
-                Vec2::new(length / 2.0, width / 2.0),
-                Vec2::new(length / 2.0, -width / 2.0),
-                Vec2::new(-length / 2.0, -width / 2.0),
-            ],
-            None,
-        ))
-        .insert(Restitution::coefficient(1.0))
         .insert_bundle(SpriteBundle {
             sprite: Sprite {
-                custom_size: Some(Vec2::new(length, width)),
+                custom_size: Some(Vec2::new(TABLE_LENGTH, TABLE_WIDTH)),
                 ..default()
             },
             texture: textures.table.clone(),
             ..default()
         })
+        .insert_bundle(TransformBundle::default());
+    commands
+        .spawn()
+        .insert(RigidBody::Fixed)
+        .insert(Collider::polyline(
+            vec![
+                Vec2::new(-TABLE_LENGTH / 2.0, -GOAL_WIDTH / 2.0),
+                Vec2::new(-TABLE_LENGTH / 2.0, -TABLE_WIDTH / 2.0),
+                Vec2::new(TABLE_LENGTH / 2.0, -TABLE_WIDTH / 2.0),
+                Vec2::new(TABLE_LENGTH / 2.0, -GOAL_WIDTH / 2.0),
+            ],
+            None,
+        ))
+        .insert(Restitution::coefficient(1.0))
+        .insert_bundle(TransformBundle::default());
+    commands
+        .spawn()
+        .insert(RigidBody::Fixed)
+        .insert(Collider::polyline(
+            vec![
+                Vec2::new(-TABLE_LENGTH / 2.0, GOAL_WIDTH / 2.0),
+                Vec2::new(-TABLE_LENGTH / 2.0, TABLE_WIDTH / 2.0),
+                Vec2::new(TABLE_LENGTH / 2.0, TABLE_WIDTH / 2.0),
+                Vec2::new(TABLE_LENGTH / 2.0, GOAL_WIDTH / 2.0),
+            ],
+            None,
+        ))
+        .insert(Restitution::coefficient(1.0))
         .insert_bundle(TransformBundle::default());
 
     commands
@@ -101,6 +128,7 @@ fn setup_table(mut commands: Commands, textures: Res<Textures>) {
         })
         .insert(Friction::coefficient(0.0))
         .insert(Restitution::coefficient(0.999))
+        .insert(Velocity::zero())
         .insert(LockedAxes::ROTATION_LOCKED)
         .insert_bundle(SpriteBundle {
             sprite: Sprite {
@@ -110,7 +138,10 @@ fn setup_table(mut commands: Commands, textures: Res<Textures>) {
             texture: textures.puck.clone(),
             ..default()
         })
-        .insert_bundle(TransformBundle::from(Transform::from_xyz(100.0, 100.0, 1.0)));
+        .insert_bundle(TransformBundle::from(Transform::from_xyz(
+            100.0, 100.0, 1.0,
+        )))
+        .insert(Puck);
 
     commands
         .spawn()
