@@ -7,4 +7,6 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.8.1", features = ["wayland"] }
+bevy_asset_loader = { version = "0.12.1", features = ["2d", "stageless"] }
 bevy_rapier2d = "0.17.0"
+iyes_loopless = "0.7.1"
