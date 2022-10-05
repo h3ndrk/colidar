@@ -34,9 +34,11 @@ const BACKGROUND_COLOR: Color = Color::rgb(0.5, 0.5, 0.5);
 
 const TABLE_WIDTH: f32 = 1200.0;
 const TABLE_LENGTH: f32 = 1920.0;
-const GOAL_WIDTH: f32 = 300.0;
+const GOAL_WIDTH: f32 = 400.0;
 const GOAL_POST_DIAMETER: f32 = 40.0;
 const SCORE_FONT_SIZE: f32 = 400.0;
+const PUCK_DIAMETER: f32 = 64.0;
+const STICK_DIAMETER: f32 = 120.0;
 //const TIMER_FONT_SIZE: f32 = 55.0;
 //const GAME_DURATION: Duration = Duration::from_secs(60);
 

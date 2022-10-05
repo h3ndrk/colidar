@@ -139,16 +139,16 @@ pub fn handle_lidar_data(
             return;
         }
         let mut points: Vec<_> = process_lidar_message(rays, lidar_settings.pixels_per_meter);
-        for points in points.windows(2) {
-            let left = points[0];
-            let right = points[1];
-            lines.line_colored(
-                Vec3::new(left.x, left.y, 1.0),
-                Vec3::new(right.x, right.y, 1.0),
-                0.0,
-                Color::BLUE,
-            );
-        }
+        // for points in points.windows(2) {
+        //     let left = points[0];
+        //     let right = points[1];
+        //     lines.line_colored(
+        //         Vec3::new(left.x, left.y, 1.0),
+        //         Vec3::new(right.x, right.y, 1.0),
+        //         0.0,
+        //         Color::BLUE,
+        //     );
+        // }
         points.sort_unstable_by(|left, right| {
             let origin = Vec2::new(0.0, -TABLE_WIDTH / 2.0);
             let left_distance = (*left - origin).length();

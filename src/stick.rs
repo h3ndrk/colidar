@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 
-use crate::assets::Textures;
+use crate::{assets::Textures, STICK_DIAMETER};
 
 #[derive(Component)]
 pub struct LeftStick;
@@ -14,10 +14,10 @@ pub fn setup_stick(mut commands: Commands, textures: Res<Textures>) {
         .spawn()
         .insert(LeftStick)
         .insert(RigidBody::KinematicPositionBased)
-        .insert(Collider::ball(60.0))
+        .insert(Collider::ball(STICK_DIAMETER / 2.0))
         .insert_bundle(SpriteBundle {
             sprite: Sprite {
-                custom_size: Some(Vec2::new(100.0, 100.0)),
+                custom_size: Some(Vec2::new(STICK_DIAMETER, STICK_DIAMETER)),
                 ..default()
             },
             texture: textures.stick.clone(),
@@ -31,16 +31,14 @@ pub fn setup_stick(mut commands: Commands, textures: Res<Textures>) {
         .spawn()
         .insert(RightStick)
         .insert(RigidBody::KinematicPositionBased)
-        .insert(Collider::ball(60.0))
+        .insert(Collider::ball(STICK_DIAMETER / 2.0))
         .insert_bundle(SpriteBundle {
             sprite: Sprite {
-                custom_size: Some(Vec2::new(100.0, 100.0)),
+                custom_size: Some(Vec2::new(STICK_DIAMETER, STICK_DIAMETER)),
                 ..default()
             },
             texture: textures.stick.clone(),
             ..default()
         })
-        .insert_bundle(TransformBundle::from(Transform::from_xyz(
-            1000.0, 0.0, 2.0,
-        )));
+        .insert_bundle(TransformBundle::from(Transform::from_xyz(1000.0, 0.0, 2.0)));
 }

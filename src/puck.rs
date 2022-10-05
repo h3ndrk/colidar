@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 
-use crate::assets::Textures;
+use crate::{assets::Textures, PUCK_DIAMETER};
 
 #[derive(Component)]
 pub struct Puck;
@@ -11,10 +11,10 @@ pub fn setup_puck(mut commands: Commands, textures: Res<Textures>) {
         .spawn()
         .insert(Puck)
         .insert(RigidBody::Dynamic)
-        .insert(Collider::ball(40.0))
+        .insert(Collider::ball(PUCK_DIAMETER / 2.0))
         .insert(Damping {
             linear_damping: 0.1,
-            angular_damping: 0.0,
+            angular_damping: 0.2,
         })
         .insert(Friction::coefficient(0.0))
         .insert(Restitution::coefficient(0.999))
@@ -22,7 +22,7 @@ pub fn setup_puck(mut commands: Commands, textures: Res<Textures>) {
         //.insert(LockedAxes::ROTATION_LOCKED)
         .insert_bundle(SpriteBundle {
             sprite: Sprite {
-                custom_size: Some(Vec2::new(40.0, 40.0)),
+                custom_size: Some(Vec2::new(PUCK_DIAMETER, PUCK_DIAMETER)),
                 ..default()
             },
             texture: textures.puck.clone(),
