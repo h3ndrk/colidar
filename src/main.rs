@@ -7,7 +7,10 @@ use bevy_rapier2d::prelude::*;
 use camera::{setup_camera, zoom_camera};
 use input::detect_game_key_input;
 use iyes_loopless::prelude::*;
-use lidar_communication::{handle_lidar_data, scale_lidar, setup_lidar_communication};
+use lidar_communication::{
+    handle_lidar_data, lidar_calibration, scale_lidar, setup_lidar_communication,
+    wait_for_lidar_messages,
+};
 use puck::setup_puck;
 use score::{detect_goals, Score};
 use stick::setup_stick;
@@ -67,11 +70,13 @@ fn main() {
                 .with_system(setup_puck)
                 .with_system(setup_stick)
                 .with_system(|mut commands: Commands| {
-                    commands.insert_resource(NextState(AppState::ConnectToLidar))
+                    commands.insert_resource(NextState(AppState::ConnectingToLidar))
                 })
                 .into(),
         )
-        .add_enter_system(AppState::ConnectToLidar, setup_lidar_communication)
+        .add_enter_system(AppState::ConnectingToLidar, setup_lidar_communication)
+        .add_system(wait_for_lidar_messages.run_in_state(AppState::ConnectingToLidar))
+        .add_enter_system(AppState::Calibration, lidar_calibration)
         .add_system_set(
             ConditionSet::new()
                 .run_if(|app_state: Res<CurrentState<AppState>>| {

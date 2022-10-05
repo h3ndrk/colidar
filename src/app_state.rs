@@ -2,7 +2,8 @@
 pub enum AppState {
     LoadingAssets,
     Setup,
-    ConnectToLidar,
+    ConnectingToLidar,
+    Calibration,
     Game(GameState),
 }
 

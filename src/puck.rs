@@ -11,7 +11,7 @@ pub fn setup_puck(mut commands: Commands, textures: Res<Textures>) {
         .spawn()
         .insert(Puck)
         .insert(RigidBody::Dynamic)
-        .insert(Collider::ball(20.0))
+        .insert(Collider::ball(40.0))
         .insert(Damping {
             linear_damping: 0.1,
             angular_damping: 0.0,
@@ -19,10 +19,10 @@ pub fn setup_puck(mut commands: Commands, textures: Res<Textures>) {
         .insert(Friction::coefficient(0.0))
         .insert(Restitution::coefficient(0.999))
         .insert(Velocity::zero())
-        .insert(LockedAxes::ROTATION_LOCKED)
+        //.insert(LockedAxes::ROTATION_LOCKED)
         .insert_bundle(SpriteBundle {
             sprite: Sprite {
-                custom_size: Some(Vec2::new(20.0, 20.0)),
+                custom_size: Some(Vec2::new(40.0, 40.0)),
                 ..default()
             },
             texture: textures.puck.clone(),
