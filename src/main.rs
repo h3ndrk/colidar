@@ -27,6 +27,7 @@ const TABLE_LENGTH: f32 = 1920.0;
 const GOAL_WIDTH: f32 = 300.0;
 const GOAL_POST_DIAMETER: f32 = 40.0;
 const FONT_SIZE: f32 = 70.0;
+const GAME_LENGTH: f32 = 60.0;
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]
 enum AppState {
@@ -43,7 +44,22 @@ pub struct Score {
 
 impl fmt::Display for Score {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}       {}", self.left, self.right)
+        let spacing = "       ";
+        let mut result = "".to_owned();
+        result.push_str(&format!("{}", self.left));
+        if self.left < 9 && self.right > 9 {
+            result.push_str(" ");
+            result.push_str(spacing);
+            result.push_str(&format!("{}", self.right))
+        } else if self.left > 9 && self.right < 9 {
+            result.push_str(spacing);
+            result.push_str(" ");
+            result.push_str(&format!("{}", self.right))
+        } else {
+            result.push_str(spacing);
+            result.push_str(&format!("{}", self.right))
+        }
+        write!(f, "{}", result)
     }
 }
 
