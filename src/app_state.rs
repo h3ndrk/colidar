@@ -5,6 +5,7 @@ pub enum AppState {
     ConnectingToLidar,
     Calibration,
     Game(GameState),
+    Tracker,
 }
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]

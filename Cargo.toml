@@ -13,4 +13,5 @@ bevy_rapier2d = "0.17.0"
 flume = "0.10.14"
 iyes_loopless = "0.7.1"
 rand = "0.8.5"
+scrapinator = { git = "https://github.com/h3ndrk/sick-scrapinator-rs", version = "0.1.0" }
 sick_scan_xd = { version = "0.1.0", path = "../sick_scan_xd/rust" }

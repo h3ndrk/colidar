@@ -15,6 +15,7 @@ use puck::setup_puck;
 use score::{detect_goals, Score};
 use stick::setup_stick;
 use table::setup_table;
+use trajectory::track_object;
 use ui::{setup_ui, update_score_ui};
 
 mod app_state;
@@ -26,6 +27,7 @@ mod puck;
 mod score;
 mod stick;
 mod table;
+mod trajectory;
 mod ui;
 
 const BACKGROUND_COLOR: Color = Color::rgb(0.5, 0.5, 0.5);
@@ -34,7 +36,7 @@ const TABLE_WIDTH: f32 = 1200.0;
 const TABLE_LENGTH: f32 = 1920.0;
 const GOAL_WIDTH: f32 = 300.0;
 const GOAL_POST_DIAMETER: f32 = 40.0;
-const SCORE_FONT_SIZE: f32 = 70.0;
+const SCORE_FONT_SIZE: f32 = 400.0;
 //const TIMER_FONT_SIZE: f32 = 55.0;
 //const GAME_DURATION: Duration = Duration::from_secs(60);
 
@@ -88,6 +90,12 @@ fn main() {
                 .with_system(zoom_camera)
                 .with_system(scale_lidar)
                 .with_system(update_score_ui)
+                .into(),
+        )
+        .add_system_set(
+            ConditionSet::new()
+                .run_in_state(AppState::Tracker)
+                .with_system(track_object)
                 .into(),
         )
         .run();

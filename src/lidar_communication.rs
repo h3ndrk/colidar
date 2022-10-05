@@ -1,7 +1,8 @@
 use bevy::prelude::*;
+use bevy_prototype_debug_lines::DebugLines;
 use iyes_loopless::state::NextState;
-use sick_scan_xd::{CartesianPoint, SickScanApiHandle};
-use std::{thread::spawn, time::Duration};
+use scrapinator::Lidar;
+use std::thread::spawn;
 
 use crate::{
     app_state::{AppState, GameState},
@@ -11,34 +12,20 @@ use crate::{
 
 #[derive(Component)]
 pub struct LidarSettings {
-    pixels_per_meter: f32,
+    pub pixels_per_meter: f32,
 }
 
 pub struct LidarChannel {
-    receiver: flume::Receiver<Vec<CartesianPoint>>,
+    pub receiver: flume::Receiver<Vec<usize>>,
 }
 
 pub fn setup_lidar_communication(mut commands: Commands) {
     let (sender, receiver) = flume::unbounded();
     spawn(move || {
         info!("Starting communication thread...");
-        SickScanApiHandle::load().unwrap();
-        info!("Loaded API Handle");
-        let api_handle = SickScanApiHandle::create();
-        info!("Created API Handle");
-        api_handle.initialize_from_command_line().unwrap();
-        info!("Initialized API Handle");
+        let mut lidar = Lidar::connect("192.168.0.1:2112");
         loop {
-            let message = api_handle
-                .wait_for_next_cartesian_point_cloud_message(Duration::from_secs(1))
-                .unwrap();
-            let data = message.get_data();
-            //info!("Got Data");
-            // for item in data {
-            //     println!("data: {:?}", item);
-            // }
-            // sleep(Duration::from_secs(1));
-
+            let data = lidar.poll_data();
             sender.send(data).unwrap();
         }
     });
@@ -63,9 +50,9 @@ pub fn lidar_calibration(
     lidar_channel: Res<LidarChannel>,
     mut lidar_settings: ResMut<LidarSettings>,
 ) {
-    if let Ok(message) = lidar_channel.receiver.try_recv() {
+    if let Ok(rays) = lidar_channel.receiver.try_recv() {
         info!("Calibrating...");
-        let points = process_lidar_message(message, 1.0);
+        let points = process_lidar_message(rays, 1.0);
         let origin = Vec2::new(0.0, -TABLE_WIDTH / 2.0);
         let closest = points
             .iter()
@@ -81,20 +68,23 @@ pub fn lidar_calibration(
         lidar_settings.pixels_per_meter = (TABLE_WIDTH / 2.0) / distance.length();
         dbg!(lidar_settings.pixels_per_meter);
         commands.insert_resource(NextState(AppState::Game(GameState::Running)));
+        //commands.insert_resource(NextState(AppState::Tracker));
     }
 }
 
-fn process_lidar_message(positions: Vec<CartesianPoint>, pixels_per_meter: f32) -> Vec<Vec2> {
+pub fn process_lidar_message(rays: Vec<usize>, pixels_per_meter: f32) -> Vec<Vec2> {
     //let layer_index = 0;
-    positions
-        .into_iter()
-        .skip(369)
-        .take(369)
-        .filter(|point| point.x != 0.0 && point.y != 0.0)
-        .map(|point| {
+    rays.into_iter()
+        .filter(|&distance| distance != 0)
+        .enumerate()
+        .map(|(i, distance)| {
+            let distance = distance as f32;
+            let theta = -138.0 + 0.75 * i as f32;
+            let x = distance * theta.to_radians().cos();
+            let y = distance * theta.to_radians().sin();
             Vec2::new(
-                -point.y * pixels_per_meter,
-                point.x * pixels_per_meter - TABLE_WIDTH / 2.0,
+                -y * pixels_per_meter,
+                x * pixels_per_meter - TABLE_WIDTH / 2.0,
             )
         })
         .filter(|point| {
@@ -116,20 +106,20 @@ pub fn scale_lidar(mut lidar_settings: ResMut<LidarSettings>, keyboard_input: Re
     lidar_settings.pixels_per_meter += 2.0 * scale;
 }
 
-struct Cluster {
-    center: Vec2,
-    points: Vec<Vec2>,
+pub struct Cluster {
+    pub center: Vec2,
+    pub points: Vec<Vec2>,
 }
 
 impl Cluster {
-    fn new(center: Vec2) -> Self {
+    pub fn new(center: Vec2) -> Self {
         Self {
             center,
             points: vec![center],
         }
     }
 
-    fn add(&mut self, point: Vec2) {
+    pub fn add(&mut self, point: Vec2) {
         self.points.push(point);
         let length = self.points.len();
         self.center = self.points.iter().sum::<Vec2>() / length as f32;
@@ -139,26 +129,26 @@ impl Cluster {
 pub fn handle_lidar_data(
     lidar_settings: Res<LidarSettings>,
     lidar_channel: Res<LidarChannel>,
-    // mut lines: ResMut<DebugLines>,
+    mut lines: ResMut<DebugLines>,
     mut left_stick: Query<&mut Transform, (With<LeftStick>, Without<RightStick>)>,
     mut right_stick: Query<&mut Transform, (Without<LeftStick>, With<RightStick>)>,
 ) {
-    for positions in lidar_channel.receiver.try_iter() {
+    if let Some(rays) = lidar_channel.receiver.try_iter().last() {
         let mut clusters = Vec::<Cluster>::new();
-        if positions.is_empty() {
-            continue;
+        if rays.is_empty() {
+            return;
         }
-        let mut points: Vec<_> = process_lidar_message(positions, lidar_settings.pixels_per_meter);
-        // for points in points.windows(2) {
-        //     let left = points[0];
-        //     let right = points[1];
-        //     lines.line_colored(
-        //         Vec3::new(left.x, left.y, 1.0),
-        //         Vec3::new(right.x, right.y, 1.0),
-        //         0.0,
-        //         Color::BLUE,
-        //     );
-        // }
+        let mut points: Vec<_> = process_lidar_message(rays, lidar_settings.pixels_per_meter);
+        for points in points.windows(2) {
+            let left = points[0];
+            let right = points[1];
+            lines.line_colored(
+                Vec3::new(left.x, left.y, 1.0),
+                Vec3::new(right.x, right.y, 1.0),
+                0.0,
+                Color::BLUE,
+            );
+        }
         points.sort_unstable_by(|left, right| {
             let origin = Vec2::new(0.0, -TABLE_WIDTH / 2.0);
             let left_distance = (*left - origin).length();
@@ -175,7 +165,7 @@ pub fn handle_lidar_data(
             }
             clusters.push(Cluster::new(point));
         }
-        let low_pass = 0.8;
+        let low_pass = 0.95;
         let left = clusters
             .iter()
             .find(|position| position.center.x.is_sign_negative());
@@ -185,7 +175,6 @@ pub fn handle_lidar_data(
                 (1.0 - low_pass) * left_stick.translation.x + low_pass * cluster.center.x;
             left_stick.translation.y =
                 (1.0 - low_pass) * left_stick.translation.y + low_pass * cluster.center.y;
-            info!("Cluster left: {}", cluster.points.len());
         }
 
         let right = clusters
@@ -197,7 +186,8 @@ pub fn handle_lidar_data(
                 (1.0 - low_pass) * right_stick.translation.x + low_pass * cluster.center.x;
             right_stick.translation.y =
                 (1.0 - low_pass) * right_stick.translation.y + low_pass * cluster.center.y;
-            info!("Cluster right: {}", cluster.points.len());
         }
+    } else {
+        warn!("No messages in the channel");
     }
 }
