@@ -31,7 +31,7 @@ pub fn setup_lidar_communication(mut commands: Commands) {
         }
     });
     commands.insert_resource(LidarChannel { receiver });
-    commands.insert_resource(NextState(AppState::Game));
+    commands.insert_resource(NextState(AppState::Pause));
 }
 
 pub fn handle_lidar_data(

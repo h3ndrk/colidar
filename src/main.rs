@@ -9,7 +9,8 @@ use bevy_prototype_debug_lines::DebugLinesPlugin;
 use bevy_rapier2d::prelude::*;
 use cursor::{update_cursor, Cursor};
 use goal::detect_goal;
-use input::detect_key_input;
+use input::detect_pause_key_input;
+use input::{detect_game_ended_key_input, detect_game_key_input};
 use iyes_loopless::prelude::*;
 use lidar_communication::{handle_lidar_data, setup_lidar_communication};
 use std::fmt;
@@ -22,19 +23,24 @@ mod lidar_communication;
 
 const BACKGROUND_COLOR: Color = Color::rgb(0.5, 0.5, 0.5);
 
-const TABLE_WIDTH: f32 = 1200.0;
-const TABLE_LENGTH: f32 = 1920.0;
+// const TABLE_WIDTH: f32 = 1200.0;
+// const TABLE_LENGTH: f32 = 1920.0;
+const TABLE_WIDTH: f32 = 600.0;
+const TABLE_LENGTH: f32 = 960.0;
 const GOAL_WIDTH: f32 = 300.0;
 const GOAL_POST_DIAMETER: f32 = 40.0;
-const FONT_SIZE: f32 = 70.0;
-const GAME_LENGTH: f32 = 60.0;
+const SCORE_FONT_SIZE: f32 = 70.0;
+const TIMER_FONT_SIZE: f32 = 55.0;
+const GAME_LENGTH: f32 = 10.0;
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]
-enum AppState {
+pub enum AppState {
     LoadingAssets,
     SetupWorld,
     ConnectToLidar,
     Game,
+    Pause,
+    Ended,
 }
 
 pub struct Score {
@@ -63,6 +69,31 @@ impl fmt::Display for Score {
     }
 }
 
+impl Score {
+    fn reset(&mut self) {
+        self.left = 0;
+        self.right = 0;
+    }
+}
+
+pub struct RemainingGameTime {
+    pub time: f32, // in seconds
+}
+
+impl fmt::Display for RemainingGameTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let minutes = (self.time / 60.0).trunc();
+        let seconds = self.time % 60.0;
+        write!(f, "{}:{:.1}", minutes, seconds)
+    }
+}
+
+impl RemainingGameTime {
+    fn reset(&mut self) {
+        self.time = GAME_LENGTH;
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -86,6 +117,7 @@ fn main() {
             ..default()
         })
         .insert_resource(Score { left: 0, right: 0 })
+        .insert_resource(RemainingGameTime { time: GAME_LENGTH })
         .add_startup_system(setup_camera)
         .init_resource::<Cursor>()
         .add_system_set(
@@ -100,12 +132,31 @@ fn main() {
             ConditionSet::new()
                 .run_in_state(AppState::Game)
                 .with_system(update_cursor)
-                // .with_system(update_stick)
-                .with_system(detect_key_input)
+                .with_system(update_stick)
+                .with_system(detect_game_key_input)
                 .with_system(detect_goal)
-                .with_system(handle_lidar_data)
+                // .with_system(handle_lidar_data)
                 .with_system(zoom_camera)
                 .with_system(score_update_system)
+                .with_system(game_timer_update_system)
+                .with_system(advance_timer_system)
+                .with_system(detect_game_end)
+                .into(),
+        )
+        .add_system_set(
+            ConditionSet::new()
+                .run_in_state(AppState::Pause)
+                .with_system(detect_pause_key_input)
+                .with_system(score_update_system)
+                .with_system(game_timer_update_system)
+                .into(),
+        )
+        .add_system_set(
+            ConditionSet::new()
+                .run_in_state(AppState::Ended)
+                .with_system(detect_game_ended_key_input)
+                .with_system(score_update_system)
+                .with_system(game_timer_update_system)
                 .into(),
         )
         .run();
@@ -120,6 +171,9 @@ pub struct Puck;
 #[derive(Component)]
 struct ScoreUi;
 
+#[derive(Component)]
+struct GameTimeUi;
+
 fn score_update_system(mut scores: Query<&mut Text, With<ScoreUi>>, score: Res<Score>) {
     let score_info = score.to_string();
     let mut text = scores.single_mut();
@@ -129,6 +183,37 @@ fn score_update_system(mut scores: Query<&mut Text, With<ScoreUi>>, score: Res<S
 fn update_stick(cursor: Res<Cursor>, mut sticks: Query<&mut Transform, With<Stick>>) {
     for mut stick in &mut sticks {
         stick.translation = cursor.position.extend(1.0);
+    }
+}
+
+fn advance_timer_system(time: Res<Time>, mut game_timer: ResMut<RemainingGameTime>) {
+    game_timer.time -= time.delta_seconds();
+}
+
+fn game_timer_update_system(
+    mut game_timers: Query<&mut Text, With<GameTimeUi>>,
+    game_timer: Res<RemainingGameTime>,
+) {
+    let timer_info = game_timer.to_string();
+    let mut text = game_timers.single_mut();
+    text.sections[0].value = timer_info;
+}
+
+fn detect_game_end(
+    mut score: ResMut<Score>,
+    mut game_time: ResMut<RemainingGameTime>,
+    mut pucks: Query<(&mut Transform, &mut Velocity), With<Puck>>,
+    mut commands: Commands,
+) {
+    if game_time.time <= 0.0 {
+        for (mut transform, mut velocity) in &mut pucks {
+            transform.translation.x = 0.0;
+            transform.translation.y = 0.0;
+            *velocity = Velocity::zero();
+        }
+        score.reset();
+        game_time.reset();
+        commands.insert_resource(NextState(AppState::Pause))
     }
 }
 
@@ -172,23 +257,46 @@ pub fn zoom_camera(
     }
 }
 
-fn setup_ui(mut commands: Commands, fonts: Res<Fonts>, mut score: ResMut<Score>) {
+fn setup_ui(
+    mut commands: Commands,
+    fonts: Res<Fonts>,
+    score: Res<Score>,
+    game_time: Res<RemainingGameTime>,
+) {
     // Setting up the score
-    let text_style = TextStyle {
+    let score_text_style = TextStyle {
         font: fonts.arial.clone(),
-        font_size: FONT_SIZE,
+        font_size: SCORE_FONT_SIZE,
         color: Color::BLACK,
     };
-    score.left = 0;
-    score.right = 0;
     commands
         .spawn_bundle(Text2dBundle {
-            text: Text::from_section(score.to_string(), text_style.clone())
-                .with_alignment(TextAlignment::CENTER),
-            transform: Transform::from_xyz(0.0, TABLE_WIDTH / 2.0 - FONT_SIZE - 5.0, 10.0),
+            text: Text::from_section(score.to_string(), score_text_style.clone())
+                .with_alignment(TextAlignment::TOP_CENTER),
+            transform: Transform::from_xyz(0.0, TABLE_WIDTH / 2.0 - 50.0, 10.0),
             ..default()
         })
         .insert(ScoreUi);
+
+    // Setting up the game timer
+    let game_time_text_style = TextStyle {
+        font: fonts.arial.clone(),
+        font_size: TIMER_FONT_SIZE,
+        color: Color::BLACK,
+    };
+    commands
+        .spawn_bundle(Text2dBundle {
+            text: Text::from_section(game_time.to_string(), game_time_text_style.clone())
+                .with_alignment(TextAlignment::TOP_RIGHT),
+            transform: Transform::from_xyz(
+                TABLE_LENGTH / 2.0 - 15.0,
+                TABLE_WIDTH / 2.0 - 15.0,
+                10.0,
+            ),
+            ..default()
+        })
+        .insert(GameTimeUi);
+    commands.insert_resource(NextState(AppState::ConnectToLidar));
 }
 
 fn setup_table(mut commands: Commands, textures: Res<Textures>) {
@@ -345,5 +453,4 @@ fn setup_table(mut commands: Commands, textures: Res<Textures>) {
             ..default()
         })
         .insert_bundle(TransformBundle::from(Transform::from_xyz(0.0, 0.0, 2.0)));
-    commands.insert_resource(NextState(AppState::ConnectToLidar));
 }
