@@ -14,3 +14,9 @@ pub struct Textures {
     #[asset(path = "textures/stick.png")]
     pub stick: Handle<Image>,
 }
+
+#[derive(AssetCollection)]
+pub struct Fonts {
+    #[asset(path = "fonts/arial.ttf")]
+    pub arial: Handle<Font>,
+}

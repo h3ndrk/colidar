@@ -1,4 +1,5 @@
-use assets::Textures;
+use assets::{Fonts, Textures};
+use bevy::prelude::*;
 use bevy::{
     input::mouse::{MouseScrollUnit, MouseWheel},
     prelude::*,
@@ -11,6 +12,7 @@ use goal::detect_goal;
 use input::detect_key_input;
 use iyes_loopless::prelude::*;
 use lidar_communication::{handle_lidar_data, setup_lidar_communication};
+use std::fmt;
 
 mod assets;
 mod cursor;
@@ -24,6 +26,7 @@ const TABLE_WIDTH: f32 = 1200.0;
 const TABLE_LENGTH: f32 = 1920.0;
 const GOAL_WIDTH: f32 = 300.0;
 const GOAL_POST_DIAMETER: f32 = 40.0;
+const FONT_SIZE: f32 = 70.0;
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]
 enum AppState {
@@ -36,8 +39,13 @@ enum AppState {
 pub struct Score {
     pub right: usize,
     pub left: usize,
-  }
+}
 
+impl fmt::Display for Score {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}       {}", self.left, self.right)
+    }
+}
 
 fn main() {
     App::new()
@@ -49,7 +57,8 @@ fn main() {
         .add_loading_state(
             LoadingState::new(AppState::LoadingAssets)
                 .continue_to_state(AppState::SetupWorld)
-                .with_collection::<Textures>(),
+                .with_collection::<Textures>()
+                .with_collection::<Fonts>(),
         )
         .add_plugin(RapierDebugRenderPlugin::default())
         .insert_resource(WindowDescriptor {
@@ -60,13 +69,16 @@ fn main() {
             gravity: Vec2::ZERO,
             ..default()
         })
-        .insert_resource(Score {
-            left: 0,
-            right: 0,
-        })  
+        .insert_resource(Score { left: 0, right: 0 })
         .add_startup_system(setup_camera)
         .init_resource::<Cursor>()
-        .add_enter_system(AppState::SetupWorld, setup_table)
+        .add_system_set(
+            ConditionSet::new()
+                .run_in_state(AppState::SetupWorld)
+                .with_system(setup_table)
+                .with_system(setup_ui)
+                .into(),
+        )
         .add_enter_system(AppState::ConnectToLidar, setup_lidar_communication)
         .add_system_set(
             ConditionSet::new()
@@ -77,6 +89,7 @@ fn main() {
                 .with_system(detect_goal)
                 .with_system(handle_lidar_data)
                 .with_system(zoom_camera)
+                .with_system(score_update_system)
                 .into(),
         )
         .run();
@@ -87,6 +100,15 @@ pub struct Stick;
 
 #[derive(Component)]
 pub struct Puck;
+
+#[derive(Component)]
+struct ScoreUi;
+
+fn score_update_system(mut scores: Query<&mut Text, With<ScoreUi>>, score: Res<Score>) {
+    let score_info = score.to_string();
+    let mut text = scores.single_mut();
+    text.sections[0].value = score_info;
+}
 
 fn update_stick(cursor: Res<Cursor>, mut sticks: Query<&mut Transform, With<Stick>>) {
     for mut stick in &mut sticks {
@@ -132,6 +154,25 @@ pub fn zoom_camera(
         projection.scale = (projection.scale * (1.0 - scroll * zoom_camera.scroll_speed))
             .clamp(zoom_camera.min_scale, zoom_camera.max_scale);
     }
+}
+
+fn setup_ui(mut commands: Commands, fonts: Res<Fonts>, mut score: ResMut<Score>) {
+    // Setting up the score
+    let text_style = TextStyle {
+        font: fonts.arial.clone(),
+        font_size: FONT_SIZE,
+        color: Color::BLACK,
+    };
+    score.left = 0;
+    score.right = 0;
+    commands
+        .spawn_bundle(Text2dBundle {
+            text: Text::from_section(score.to_string(), text_style.clone())
+                .with_alignment(TextAlignment::CENTER),
+            transform: Transform::from_xyz(0.0, TABLE_WIDTH / 2.0 - FONT_SIZE - 5.0, 10.0),
+            ..default()
+        })
+        .insert(ScoreUi);
 }
 
 fn setup_table(mut commands: Commands, textures: Res<Textures>) {
