@@ -5,6 +5,10 @@ use bevy_asset_loader::prelude::*;
 pub struct Textures {
     #[asset(path = "textures/table.png")]
     pub table: Handle<Image>,
+    #[asset(path = "textures/center_circle.png")]
+    pub center_circle: Handle<Image>,
+    #[asset(path = "textures/goal_post.png")]
+    pub goal_post: Handle<Image>,
     #[asset(path = "textures/puck.png")]
     pub puck: Handle<Image>,
     #[asset(path = "textures/stick.png")]

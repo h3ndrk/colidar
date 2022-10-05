@@ -1,27 +1,35 @@
 use assets::Textures;
-use bevy::prelude::*;
+use bevy::{
+    input::mouse::{MouseScrollUnit, MouseWheel},
+    prelude::*,
+};
 use bevy_asset_loader::prelude::*;
+use bevy_prototype_debug_lines::DebugLinesPlugin;
 use bevy_rapier2d::prelude::*;
 use cursor::{update_cursor, Cursor};
 use goal::detect_goal;
 use input::detect_key_input;
 use iyes_loopless::prelude::*;
+use lidar_communication::{handle_lidar_data, setup_lidar_communication};
 
 mod assets;
 mod cursor;
 mod goal;
 mod input;
+mod lidar_communication;
 
 const BACKGROUND_COLOR: Color = Color::rgb(0.5, 0.5, 0.5);
 
-const TABLE_WIDTH: f32 = 400.0;
-const TABLE_LENGTH: f32 = 800.0;
-const GOAL_WIDTH: f32 = 100.0;
+const TABLE_WIDTH: f32 = 1200.0;
+const TABLE_LENGTH: f32 = 1920.0;
+const GOAL_WIDTH: f32 = 300.0;
+const GOAL_POST_DIAMETER: f32 = 40.0;
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]
 enum AppState {
     LoadingAssets,
     SetupWorld,
+    ConnectToLidar,
     Game,
 }
 
@@ -35,6 +43,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
+        .add_plugin(DebugLinesPlugin::default())
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_loopless_state(AppState::LoadingAssets)
         .add_loading_state(
@@ -58,20 +67,23 @@ fn main() {
         .add_startup_system(setup_camera)
         .init_resource::<Cursor>()
         .add_enter_system(AppState::SetupWorld, setup_table)
+        .add_enter_system(AppState::ConnectToLidar, setup_lidar_communication)
         .add_system_set(
             ConditionSet::new()
                 .run_in_state(AppState::Game)
                 .with_system(update_cursor)
-                .with_system(update_stick)
+                // .with_system(update_stick)
                 .with_system(detect_key_input)
                 .with_system(detect_goal)
+                .with_system(handle_lidar_data)
+                .with_system(zoom_camera)
                 .into(),
         )
         .run();
 }
 
 #[derive(Component)]
-struct Stick;
+pub struct Stick;
 
 #[derive(Component)]
 pub struct Puck;
@@ -83,7 +95,43 @@ fn update_stick(cursor: Res<Cursor>, mut sticks: Query<&mut Transform, With<Stic
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn_bundle(Camera2dBundle::default());
+    let mut camera = Camera2dBundle::default();
+    camera.projection.scale = 1.0;
+    commands.spawn_bundle(camera).insert(ZoomCamera {
+        min_scale: 0.1,
+        max_scale: 1.0,
+        scroll_speed: 0.01,
+    });
+}
+
+#[derive(Component)]
+pub struct ZoomCamera {
+    min_scale: f32,
+    max_scale: f32,
+    scroll_speed: f32,
+}
+
+pub fn zoom_camera(
+    mut query: Query<(&ZoomCamera, &mut OrthographicProjection)>,
+    mut scroll_events: EventReader<MouseWheel>,
+) {
+    if scroll_events.is_empty() {
+        return;
+    }
+
+    let pixels_per_line = 10.0;
+    let scroll = scroll_events
+        .iter()
+        .map(|event| match event.unit {
+            MouseScrollUnit::Pixel => event.y,
+            MouseScrollUnit::Line => event.y * pixels_per_line,
+        })
+        .sum::<f32>();
+
+    for (zoom_camera, mut projection) in &mut query {
+        projection.scale = (projection.scale * (1.0 - scroll * zoom_camera.scroll_speed))
+            .clamp(zoom_camera.min_scale, zoom_camera.max_scale);
+    }
 }
 
 fn setup_table(mut commands: Commands, textures: Res<Textures>) {
@@ -99,6 +147,79 @@ fn setup_table(mut commands: Commands, textures: Res<Textures>) {
             ..default()
         })
         .insert_bundle(TransformBundle::default());
+    commands
+        .spawn()
+        .insert_bundle(SpriteBundle {
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(300.0, 300.0)),
+                ..default()
+            },
+            texture: textures.center_circle.clone(),
+            ..default()
+        })
+        .insert_bundle(TransformBundle::from(Transform::from_xyz(0.0, 0.0, 1.0)));
+
+    commands
+        .spawn()
+        .insert_bundle(SpriteBundle {
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(GOAL_POST_DIAMETER, GOAL_POST_DIAMETER)),
+                ..default()
+            },
+            texture: textures.goal_post.clone(),
+            ..default()
+        })
+        .insert_bundle(TransformBundle::from(Transform::from_xyz(
+            -TABLE_LENGTH / 2.0,
+            GOAL_WIDTH / 2.0 + GOAL_POST_DIAMETER / 2.0,
+            1.0,
+        )));
+    commands
+        .spawn()
+        .insert_bundle(SpriteBundle {
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(GOAL_POST_DIAMETER, GOAL_POST_DIAMETER)),
+                ..default()
+            },
+            texture: textures.goal_post.clone(),
+            ..default()
+        })
+        .insert_bundle(TransformBundle::from(Transform::from_xyz(
+            -TABLE_LENGTH / 2.0,
+            -GOAL_WIDTH / 2.0 - GOAL_POST_DIAMETER / 2.0,
+            1.0,
+        )));
+    commands
+        .spawn()
+        .insert_bundle(SpriteBundle {
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(GOAL_POST_DIAMETER, GOAL_POST_DIAMETER)),
+                ..default()
+            },
+            texture: textures.goal_post.clone(),
+            ..default()
+        })
+        .insert_bundle(TransformBundle::from(Transform::from_xyz(
+            TABLE_LENGTH / 2.0,
+            GOAL_WIDTH / 2.0 + GOAL_POST_DIAMETER / 2.0,
+            1.0,
+        )));
+    commands
+        .spawn()
+        .insert_bundle(SpriteBundle {
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(GOAL_POST_DIAMETER, GOAL_POST_DIAMETER)),
+                ..default()
+            },
+            texture: textures.goal_post.clone(),
+            ..default()
+        })
+        .insert_bundle(TransformBundle::from(Transform::from_xyz(
+            TABLE_LENGTH / 2.0,
+            -GOAL_WIDTH / 2.0 - GOAL_POST_DIAMETER / 2.0,
+            1.0,
+        )));
+
     commands
         .spawn()
         .insert(RigidBody::Fixed)
@@ -149,7 +270,7 @@ fn setup_table(mut commands: Commands, textures: Res<Textures>) {
             ..default()
         })
         .insert_bundle(TransformBundle::from(Transform::from_xyz(
-            100.0, 100.0, 1.0,
+            100.0, 100.0, 2.0,
         )))
         .insert(Puck);
 
@@ -166,6 +287,6 @@ fn setup_table(mut commands: Commands, textures: Res<Textures>) {
             texture: textures.stick.clone(),
             ..default()
         })
-        .insert_bundle(TransformBundle::from(Transform::from_xyz(0.0, 0.0, 1.0)));
-    commands.insert_resource(NextState(AppState::Game))
+        .insert_bundle(TransformBundle::from(Transform::from_xyz(0.0, 0.0, 2.0)));
+    commands.insert_resource(NextState(AppState::ConnectToLidar));
 }
