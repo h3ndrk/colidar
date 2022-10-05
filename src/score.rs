@@ -1,9 +1,15 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 
-use crate::{Puck, Score, TABLE_LENGTH};
+use crate::{puck::Puck, TABLE_LENGTH};
 
-pub fn detect_goal(
+#[derive(Default, Debug)]
+pub struct Score {
+    pub right: usize,
+    pub left: usize,
+}
+
+pub fn detect_goals(
     mut score: ResMut<Score>,
     mut pucks: Query<(&mut Transform, &mut Velocity), With<Puck>>,
 ) {
