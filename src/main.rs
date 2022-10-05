@@ -25,6 +25,12 @@ enum AppState {
     Game,
 }
 
+pub struct Score {
+    pub right: usize,
+    pub left: usize,
+  }
+
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -45,6 +51,10 @@ fn main() {
             gravity: Vec2::ZERO,
             ..default()
         })
+        .insert_resource(Score {
+            left: 0,
+            right: 0,
+        })  
         .add_startup_system(setup_camera)
         .init_resource::<Cursor>()
         .add_enter_system(AppState::SetupWorld, setup_table)
